@@ -26,7 +26,7 @@ MESSAGE_LIMIT = 2500
 
 class GroupUserScanner:
     def __init__(self):
-        self.client = TelegramClient('user_scanner', API_ID, API_HASH)
+        self.client = TelegramClient('data/user_scanner', API_ID, API_HASH)
         self.recorded_users = {}  # {group_folder: set(user_ids)}
         self.last_scan_dates = {}  # Son tarama tarihlerini tut
         self.error_reported = False  # Hata raporu gönderildi mi?
