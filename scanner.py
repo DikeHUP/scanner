@@ -144,7 +144,7 @@ class GroupUserScanner:
         return False
         
     async def scan_group_messages(self, group):
-        """Grup mesajlarını tarayarak NORMAL kullanıcıları bulur (adminler hariç)"""
+        """Grup mesajlarını tarayarak NORMAL kullanıcıları bulur (adminler ve botlar hariç)"""
         print(f"  📁 Taranıyor: {group.title}")
         
         try:
@@ -186,6 +186,13 @@ class GroupUserScanner:
                         continue
                         
                     user = await self.client.get_entity(user_id)
+                    
+                    # ========== BOT KONTROLÜ ==========
+                    if user.bot:
+                        username_info = f"@{user.username}" if user.username else "isimsiz bot"
+                        print(f"       🤖 Bot atlandı: {username_info} [ID:{user_id}]")
+                        continue
+                    # =================================
                     
                     # access_hash'i al
                     access_hash = None
@@ -256,7 +263,7 @@ class GroupUserScanner:
                     os.remove(temp_csv)
         
         # Zip'i gönder
-        caption = f"📊 **Tarama Raporu**\n📅 Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n📌 Toplam: {total_new} yeni normal kullanıcı\n🔑 ID + HASH birlikte\n📁 {len(new_users_by_group)} grup ayrı ayrı"
+        caption = f"📊 **Tarama Raporu**\n📅 Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n📌 Toplam: {total_new} yeni normal kullanıcı\n🔑 ID + HASH birlikte\n📁 {len(new_users_by_group)} grup ayrı ayrı\n🤖 Botlar otomatik atlandı"
         await self.client.send_file(YOUR_USER_ID, zip_filename, caption=caption)
         os.remove(zip_filename)
         
@@ -266,7 +273,7 @@ class GroupUserScanner:
             await self.client.send_file(YOUR_USER_ID, hash_file, caption="🔑 **Access Hash Veritabanı** (Birleştirici için)")
         
         # Özet mesaj
-        summary = "📋 **Grup Bazlı Özet:**\n\n"
+        summary = "📋 **Grup Bazlı Özet (Botlar hariç):**\n\n"
         for group_folder, users in new_users_by_group.items():
             if users:
                 summary += f"• `{group_folder}`: {len(users)} yeni kullanıcı\n"
@@ -276,11 +283,11 @@ class GroupUserScanner:
         """Tüm grupları tarar"""
         start_time = datetime.now()
         
-        await self.client.send_message(YOUR_USER_ID, f"🟢 **Tarama Başladı**\n⏰ Saat: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n📌 Tip: {'İlk Tarama' if scan_type == 'first' else 'Planlı Tarama'}\n🔑 Sadece NORMAL kullanıcılar kaydedilecek\n📁 Gruplar ayrı ayrı işlenecek")
+        await self.client.send_message(YOUR_USER_ID, f"🟢 **Tarama Başladı**\n⏰ Saat: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n📌 Tip: {'İlk Tarama' if scan_type == 'first' else 'Planlı Tarama'}\n🔑 Sadece NORMAL kullanıcılar kaydedilecek (Adminler ve Botlar ATLANACAK)\n📁 Gruplar ayrı ayrı işlenecek")
         
         print(f"\n{'='*60}")
         print(f"Tarama başladı: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Sadece NORMAL kullanıcılar kaydedilecek (Adminler ATLANACAK)")
+        print(f"Sadece NORMAL kullanıcılar kaydedilecek (Adminler ve Botlar ATLANACAK)")
         print(f"Gruplar ayrı ayrı işlenecek")
         print(f"{'='*60}")
         
@@ -305,13 +312,13 @@ class GroupUserScanner:
             
             hash_count = len(self.user_hashes)
             total_new = sum(len(u) for u in new_users_by_group.values())
-            await self.client.send_message(YOUR_USER_ID, f"🔴 **Tarama Tamamlandı**\n⏰ Saat: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n⏱️ Süre: {(end_time - start_time).seconds} saniye\n📊 Toplam: {total_new} yeni kullanıcı\n🔑 Toplam Hash: {hash_count}\n📁 {len(new_users_by_group)} grupta kullanıcı bulundu")
+            await self.client.send_message(YOUR_USER_ID, f"🔴 **Tarama Tamamlandı**\n⏰ Saat: {end_time.strftime('%Y-%m-%d %H:%M:%S')}\n⏱️ Süre: {(end_time - start_time).seconds} saniye\n📊 Toplam: {total_new} yeni kullanıcı (Botlar hariç)\n🔑 Toplam Hash: {hash_count}\n📁 {len(new_users_by_group)} grupta kullanıcı bulundu")
             
             self.error_reported = False
             
             print(f"\n{'='*60}")
             print(f"Tarama tamamlandı: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"Toplam {total_new} yeni kullanıcı kaydedildi.")
+            print(f"Toplam {total_new} yeni kullanıcı kaydedildi (Botlar hariç).")
             print(f"Toplam {hash_count} access_hash toplandı.")
             print(f"{'='*60}\n")
             
@@ -324,11 +331,11 @@ class GroupUserScanner:
         """Planlanmış saatlerde tarama yapar"""
         await self.client.start()
         
-        await self.client.send_message(YOUR_USER_ID, f"✅ **Tarayıcı Başlatıldı**\n⏰ Çalışma Saatleri: {', '.join(f'{h:02d}:00' for h in SCAN_HOURS)}\n🔑 Sadece NORMAL kullanıcılar kaydedilecek\n📌 Adminler otomatik atlanacak\n📁 Gruplar ayrı ayrı işlenecek\n📌 İlk tarama hemen başlıyor...")
+        await self.client.send_message(YOUR_USER_ID, f"✅ **Tarayıcı Başlatıldı**\n⏰ Çalışma Saatleri: {', '.join(f'{h:02d}:00' for h in SCAN_HOURS)}\n🔑 Sadece NORMAL kullanıcılar kaydedilecek\n📌 Adminler ve Botlar otomatik atlanacak\n📁 Gruplar ayrı ayrı işlenecek\n📌 İlk tarama hemen başlıyor...")
         
         print("Telegram Kullanıcı Tarayıcı Başladı")
         print(f"Tarama saatleri: {', '.join(f'{h:02d}:00' for h in SCAN_HOURS)}")
-        print("Sadece NORMAL kullanıcılar kaydedilecek (Adminler ATLANACAK)")
+        print("Sadece NORMAL kullanıcılar kaydedilecek (Adminler ve Botlar ATLANACAK)")
         print("Gruplar ayrı ayrı işlenecek")
         
         # İLK TARAMA
