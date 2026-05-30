@@ -36,7 +36,8 @@ class GroupUserScanner:
             try:
                 with open(hash_file, 'r', encoding='utf-8') as f:
                     self.user_hashes = json.load(f)
-            except:
+            except Exception as e:
+                print(f"Hash dosyası okuma hatası: {e}")
                 self.user_hashes = {}
         
         if not os.path.exists(RECORDS_DIR):
@@ -126,8 +127,8 @@ class GroupUserScanner:
             if hasattr(participant, 'participant'):
                 if participant.participant.is_admin or participant.participant.is_creator:
                     return True
-        except:
-            pass
+        except Exception as e:
+            print(f"🔐 Admin kontrol hatası (grup: {getattr(group, 'title', '?')}, user: {user_id}): {type(e).__name__} - {e}")
         return False
         
     async def scan_group_messages(self, group):
@@ -154,7 +155,8 @@ class GroupUserScanner:
                         reply_msg = await self.client.get_messages(group, ids=message.reply_to_msg_id)
                         if reply_msg and reply_msg.sender_id:
                             users_found.add(reply_msg.sender_id)
-                    except:
+                    except Exception as e:
+                        print(f"  ⚠️ Reply mesaj hatası (msg {message.id}): {type(e).__name__}")
                         pass
             
             new_users = []
@@ -190,22 +192,27 @@ class GroupUserScanner:
                         })
                         
                 except FloodWaitError as e:
+                    print(f"  ⏳ FloodWait (user {user_id}): {e.seconds} saniye bekle")
                     await asyncio.sleep(e.seconds)
-                except:
+                except Exception as e:
+                    print(f"  ❌ Kullanıcı {user_id} işlenirken hata: {type(e).__name__} - {e}")
                     continue
                     
             return group_folder, new_users
             
         except FloodWaitError as e:
+            print(f"  🚫 Grup {group.title} FloodWait: {e.seconds} saniye")
             await asyncio.sleep(e.seconds)
             return None, []
-        except:
+        except Exception as e:
+            print(f"  ❌ Grup {group.title} taranırken hata: {type(e).__name__} - {e}")
             return None, []
             
     async def send_telegram_report(self, new_users_by_group):
         total_new = sum(len(u) for u in new_users_by_group.values())
         
         if not new_users_by_group:
+            print("📭 Yeni kullanıcı yok, rapor gönderilmedi.")
             return
         
         zip_filename = f"user_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
@@ -234,44 +241,59 @@ class GroupUserScanner:
         
         try:
             await self.client.send_file(YOUR_USER_ID, zip_filename, caption=caption)
+            print(f"📤 Rapor zip'i ({zip_filename}) gönderildi.")
         except (FloodWaitError, PeerFloodError) as e:
-            # Hata olursa zip'i sil ve sessizce bekle
-            pass
+            print(f"⚠️ Rapor gönderme hatası (zip): {type(e).__name__} - {e}")
+            # Zip'i silmeden önce logla
+        except Exception as e:
+            print(f"❌ Rapor gönderme hatası (zip): {type(e).__name__} - {e}")
         
-        os.remove(zip_filename)
+        try:
+            os.remove(zip_filename)
+        except:
+            pass
         
         # Hash dosyasını gönder
         hash_file = os.path.join(HASH_STORAGE_DIR, 'user_hashes.json')
         if os.path.exists(hash_file):
             try:
                 await self.client.send_file(YOUR_USER_ID, hash_file, caption="🔑 Hash DB")
-            except:
-                pass
+                print("📤 Hash DB dosyası gönderildi.")
+            except Exception as e:
+                print(f"⚠️ Hash DB gönderme hatası: {type(e).__name__} - {e}")
         
     async def scan_all_groups(self):
         start_time = datetime.now()
+        print(f"\n🔍 Tarama başladı: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
             dialogs = await self.client.get_dialogs()
             groups = [d for d in dialogs if d.is_group or d.is_channel]
+            print(f"📡 Toplam dialog: {len(dialogs)}, Grup/Kanal: {len(groups)}")
             
             new_users_by_group = {}
             
             for group in groups:
+                print(f"\n🔎 Taranıyor: {group.title}")
                 group_folder, new_users = await self.scan_group_messages(group.entity)
                 if new_users:
                     new_users_by_group[group_folder] = new_users
+                    print(f"   ✅ {len(new_users)} yeni kullanıcı bulundu.")
+                else:
+                    print(f"   ℹ️ Yeni kullanıcı yok.")
                 await asyncio.sleep(2)
                 
             await self.send_telegram_report(new_users_by_group)
             
             self.error_reported = False
+            print(f"✅ Tarama tamamlandı: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             
         except Exception as e:
-            print(f"Hata: {e}")
+            print(f"🔥 scan_all_groups hatası: {type(e).__name__} - {e}")
             
     async def run_scheduled_scanner(self):
         await self.client.start()
+        print("✅ Client başlatıldı, oturum açıldı.")
         
         # İlk tarama
         await self.scan_all_groups()
@@ -288,11 +310,12 @@ class GroupUserScanner:
                     if current_hour == scan_hour and current_minute == 0:
                         if last_scan_records[scan_hour] != now.date():
                             last_scan_records[scan_hour] = now.date()
+                            print(f"⏰ Zamanlanmış tarama başlıyor: {now.strftime('%Y-%m-%d %H:%M:%S')}")
                             await self.scan_all_groups()
                             await asyncio.sleep(60)
                             
             except Exception as e:
-                print(f"Döngü hatası: {e}")
+                print(f"🔄 Döngü hatası: {type(e).__name__} - {e}")
                 
             await asyncio.sleep(30)
 
@@ -305,6 +328,6 @@ if __name__ == '__main__':
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nDurduruldu.")
+        print("\n⏹️ Durduruldu.")
     except Exception as e:
-        print(f"Hata: {e}")
+        print(f"💥 Beklenmeyen hata: {type(e).__name__} - {e}")
